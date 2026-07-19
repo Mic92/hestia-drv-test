@@ -17,12 +17,14 @@ jobs:
       - uses: Mic92/hestia@v2
       - id: eval
         run: |
-          nix run nixpkgs#nix-eval-jobs -- --flake .#hydraJobs > jobs.json
+          nix run nixpkgs#nix-eval-jobs -- --flake .#hydraJobs --check-cache-status > jobs.json
           jq -r '.drvPath' jobs.json | xargs "$HESTIA_BIN" hook --socket "$HESTIA_SOCKET"
-          echo "jobs=$(jq -sc . jobs.json)" >> "$GITHUB_OUTPUT"
+          # Only build jobs whose outputs are not already substitutable.
+          echo "jobs=$(jq -sc 'map(select(.isCached | not))' jobs.json)" >> "$GITHUB_OUTPUT"
 
   build:
     needs: eval
+    if: needs.eval.outputs.jobs != '[]'
     runs-on: ubuntu-latest
     permissions:
       contents: read
