@@ -61,6 +61,21 @@
           small-2 = pkgs.runCommand "small-2" { meta.hestia.group = "small-${system}"; } ''
             echo "small 2" > $out
           '';
+          # Full NixOS system closure: thousands of drvs and sources in the
+          # closure, stress test for drv registration/upload and manifest
+          # size. Mostly substituted from cache.nixos.org at build time.
+          nixos-minimal =
+            (nixpkgs.lib.nixosSystem {
+              inherit system;
+              modules = [
+                {
+                  boot.isContainer = true;
+                  system.stateVersion = "26.05";
+                  # Rebuild marker so the toplevel is never upstream-cached.
+                  environment.etc."hestia-drv-test".text = "stress test";
+                }
+              ];
+            }).config.system.build.toplevel;
           # Runner override via meta.hestia.os.
           pinned-runner = pkgs.runCommand "pinned-runner" {
             meta.hestia.os = if system == "x86_64-linux" then "ubuntu-latest" else "ubuntu-24.04-arm";
