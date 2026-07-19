@@ -1,26 +1,73 @@
 {
-  description = "Test repo for hestia's eval-once / build-by-drv-path workflow";
+  description = "Test repo for hestia's matrix subaction (eval once, build by drv path)";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
   outputs =
     { nixpkgs, ... }:
     let
-      pkgs = nixpkgs.legacyPackages.x86_64-linux;
+      systems = [
+        "x86_64-linux"
+        "aarch64-linux"
+      ];
+      eachSystem = f: nixpkgs.lib.genAttrs systems (system: f nixpkgs.legacyPackages.${system});
     in
     {
-      hydraJobs = {
-        hello-a = pkgs.runCommand "hello-a" { } ''
-          echo "hello from a $(date)" > $out
-        '';
-        hello-b = pkgs.runCommand "hello-b" { } ''
-          echo "hello from b" > $out
-          head -c 1M /dev/urandom >> $out
-        '';
-        hello-c = pkgs.runCommand "hello-c" { src = ./flake.nix; } ''
-          cat $src > $out
-          echo "hello from c" >> $out
-        '';
-      };
+      checks = eachSystem (
+        pkgs:
+        let
+          inherit (pkgs.stdenv.hostPlatform) system;
+          # Shared, never-upstream-cached dependency: exercises how uncached
+          # deps behave across matrix jobs (each job that needs it rebuilds
+          # or substitutes it from previous runs).
+          shared-dep = pkgs.runCommand "shared-dep" { } ''
+            echo "shared dependency" > $out
+          '';
+        in
+        rec {
+          # Impure output (differs every rebuild), stresses re-push logic.
+          impure-date = pkgs.runCommand "impure-date" { } ''
+            echo "built at $(date)" > $out
+          '';
+          # ~1 MiB of incompressible data: exercises chunking/pack upload.
+          big-random = pkgs.runCommand "big-random" { } ''
+            head -c 1M /dev/urandom > $out
+          '';
+          # Local source input: the drv closure includes the source path.
+          with-src = pkgs.runCommand "with-src" { src = ./flake.nix; } ''
+            cat $src > $out
+          '';
+          # Alias of with-src: same drvPath, must be deduplicated to one job.
+          with-src-alias = with-src;
+          # Depends on shared-dep and a real nixpkgs package (upstream
+          # substitutable), so the job mixes hestia and cache.nixos.org.
+          uses-deps = pkgs.runCommand "uses-deps" { buildInputs = [ pkgs.hello ]; } ''
+            hello > $out
+            cat ${shared-dep} >> $out
+          '';
+          # Rebuilt nixpkgs package (not upstream cached): bigger drv
+          # closure, patched source.
+          patched-hello = pkgs.hello.overrideAttrs (old: {
+            postPatch = (old.postPatch or "") + ''
+              echo "patched by hestia-drv-test" > PATCHED
+            '';
+            doCheck = false;
+          });
+          # Grouped: both build in one matrix job. Group names include the
+          # system because a group must not span systems.
+          small-1 = pkgs.runCommand "small-1" { meta.hestia.group = "small-${system}"; } ''
+            echo "small 1" > $out
+          '';
+          small-2 = pkgs.runCommand "small-2" { meta.hestia.group = "small-${system}"; } ''
+            echo "small 2" > $out
+          '';
+          # Runner override via meta.hestia.os.
+          pinned-runner = pkgs.runCommand "pinned-runner" {
+            meta.hestia.os = if system == "x86_64-linux" then "ubuntu-latest" else "ubuntu-24.04-arm";
+          } ''
+            echo "pinned runner" > $out
+          '';
+        }
+      );
     };
 }

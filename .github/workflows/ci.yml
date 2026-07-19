@@ -10,38 +10,38 @@ jobs:
     permissions:
       contents: read
     outputs:
-      jobs: ${{ steps.eval.outputs.jobs }}
+      matrix: ${{ steps.matrix.outputs.matrix }}
+      any-jobs: ${{ steps.matrix.outputs.any-jobs }}
+      manifest-version: ${{ steps.matrix.outputs.manifest-version }}
     steps:
       - uses: actions/checkout@v6
       - uses: NixOS/nix-installer-action@main
-      - uses: Mic92/hestia@v2
-      - id: eval
-        run: |
-          nix run nixpkgs#nix-eval-jobs -- --flake .#hydraJobs --check-cache-status > jobs.json
-          jq -r '.drvPath' jobs.json | xargs "$HESTIA_BIN" hook --socket "$HESTIA_SOCKET"
-          # Skip jobs whose outputs are already substitutable and collapse
-          # aliased attrs that evaluate to the same derivation.
-          echo "jobs=$(jq -sc 'map(select(.isCached | not)) | unique_by(.drvPath)' jobs.json)" >> "$GITHUB_OUTPUT"
+      - uses: Mic92/hestia-beta@main
+      - id: matrix
+        uses: Mic92/hestia-beta/matrix@main
+        with:
+          nix-eval-jobs: "nix run nixpkgs#nix-eval-jobs --"
 
   build:
     needs: eval
-    if: needs.eval.outputs.jobs != '[]'
-    runs-on: ubuntu-latest
+    if: needs.eval.outputs.any-jobs == 'true'
     permissions:
       contents: read
+    name: ${{ matrix.name }} (${{ matrix.system }})
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
-      matrix:
-        job: ${{ fromJSON(needs.eval.outputs.jobs) }}
-    name: build ${{ matrix.job.attr }}
+      matrix: ${{ fromJSON(needs.eval.outputs.matrix) }}
     steps:
       - uses: NixOS/nix-installer-action@main
-      - uses: Mic92/hestia@v2
-      - run: nix build -L "${{ matrix.job.drvPath }}^*"
+      - uses: Mic92/hestia-beta@main
+        with:
+          wait-manifest-version: ${{ needs.eval.outputs.manifest-version }}
+      - run: nix build -L ${{ matrix.installables }}
       - name: debug narinfo
         if: always()
         run: |
-          drv="${{ matrix.job.drvPath }}"
+          drv="${{ matrix.drvPath }}"
           hash=$(basename "$drv" | cut -d- -f1)
           echo "narinfo for $drv:"
           curl -sS -w 'HTTP %{http_code}\n' "http://$HESTIA_LISTEN/$hash.narinfo" || true
