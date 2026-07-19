@@ -38,3 +38,12 @@ jobs:
       - uses: NixOS/nix-installer-action@main
       - uses: Mic92/hestia@v2
       - run: nix build -L "${{ matrix.job.drvPath }}^*"
+      - name: debug narinfo
+        if: always()
+        run: |
+          drv="${{ matrix.job.drvPath }}"
+          hash=$(basename "$drv" | cut -d- -f1)
+          echo "narinfo for $drv:"
+          curl -sS -w 'HTTP %{http_code}\n' "http://$HESTIA_LISTEN/$hash.narinfo" || true
+          echo '--- serve.log ---'
+          cat "$HESTIA_SERVE_LOG" || true
