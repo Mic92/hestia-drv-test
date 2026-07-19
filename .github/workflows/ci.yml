@@ -40,13 +40,9 @@ jobs:
       - name: Prefetch drv closure (one request)
         run: |
           set -euo pipefail
-          hashes=$(for installable in ${{ matrix.installables }}; do
-            basename "${installable%^*}" | cut -c1-32
-          done | paste -sd,)
-          # Download and import timed separately to see which side is slow.
-          time curl -fsS -o closure.export "http://$HESTIA_LISTEN/closure/$hashes"
-          ls -la closure.export
-          time nix-store --import < closure.export | wc -l
+          hashes=$(printf '%s\n' ${{ matrix.installables }} |
+            awk -F/ '{printf "%s%s", (NR > 1 ? "," : ""), substr($NF, 1, 32)}')
+          curl -fsS "http://$HESTIA_LISTEN/closure/$hashes" | nix-store --import | wc -l
       - run: nix build -L ${{ matrix.installables }}
       - name: debug narinfo
         if: always()
