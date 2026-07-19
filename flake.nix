@@ -21,7 +21,7 @@
           # deps behave across matrix jobs (each job that needs it rebuilds
           # or substitutes it from previous runs).
           shared-dep = pkgs.runCommand "shared-dep" { } ''
-            echo "shared dependency round 5" > $out
+            echo "shared dependency round 6" > $out
           '';
         in
         rec {
