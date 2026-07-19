@@ -21,7 +21,7 @@
           # deps behave across matrix jobs (each job that needs it rebuilds
           # or substitutes it from previous runs).
           shared-dep = pkgs.runCommand "shared-dep" { } ''
-            echo "shared dependency round 2" > $out
+            echo "shared dependency round 3" > $out
           '';
         in
         rec {
@@ -72,7 +72,7 @@
                   boot.isContainer = true;
                   system.stateVersion = "26.05";
                   # Rebuild marker so the toplevel is never upstream-cached.
-                  environment.etc."hestia-drv-test".text = "stress test round 2";
+                  environment.etc."hestia-drv-test".text = "stress test round 3";
                 }
               ];
             }).config.system.build.toplevel;

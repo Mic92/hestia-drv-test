@@ -43,7 +43,10 @@ jobs:
           hashes=$(for installable in ${{ matrix.installables }}; do
             basename "${installable%^*}" | cut -c1-32
           done | paste -sd,)
-          curl -fsS "http://$HESTIA_LISTEN/closure/$hashes" | nix-store --import | wc -l
+          # Download and import timed separately to see which side is slow.
+          time curl -fsS -o closure.export "http://$HESTIA_LISTEN/closure/$hashes"
+          ls -la closure.export
+          time nix-store --import < closure.export | wc -l
       - run: nix build -L ${{ matrix.installables }}
       - name: debug narinfo
         if: always()
