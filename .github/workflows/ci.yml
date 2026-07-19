@@ -19,8 +19,9 @@ jobs:
         run: |
           nix run nixpkgs#nix-eval-jobs -- --flake .#hydraJobs --check-cache-status > jobs.json
           jq -r '.drvPath' jobs.json | xargs "$HESTIA_BIN" hook --socket "$HESTIA_SOCKET"
-          # Only build jobs whose outputs are not already substitutable.
-          echo "jobs=$(jq -sc 'map(select(.isCached | not))' jobs.json)" >> "$GITHUB_OUTPUT"
+          # Skip jobs whose outputs are already substitutable and collapse
+          # aliased attrs that evaluate to the same derivation.
+          echo "jobs=$(jq -sc 'map(select(.isCached | not)) | unique_by(.drvPath)' jobs.json)" >> "$GITHUB_OUTPUT"
 
   build:
     needs: eval
