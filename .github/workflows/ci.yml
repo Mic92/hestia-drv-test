@@ -1,0 +1,37 @@
+name: eval-once build-by-drv
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      jobs: ${{ steps.eval.outputs.jobs }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: NixOS/nix-installer-action@main
+      - uses: Mic92/hestia@v2
+      - id: eval
+        run: |
+          nix run nixpkgs#nix-eval-jobs -- --flake .#hydraJobs > jobs.json
+          jq -r '.drvPath' jobs.json | xargs "$HESTIA_BIN" hook --socket "$HESTIA_SOCKET"
+          echo "jobs=$(jq -sc . jobs.json)" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: eval
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        job: ${{ fromJSON(needs.eval.outputs.jobs) }}
+    name: build ${{ matrix.job.attr }}
+    steps:
+      - uses: NixOS/nix-installer-action@main
+      - uses: Mic92/hestia@v2
+      - run: nix build -L "${{ matrix.job.drvPath }}^*"
