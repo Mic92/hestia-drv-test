@@ -72,7 +72,7 @@
                   boot.isContainer = true;
                   system.stateVersion = "26.05";
                   # Rebuild marker so the toplevel is never upstream-cached.
-                  environment.etc."hestia-drv-test".text = "stress test round 5";
+                  environment.etc."hestia-drv-test".text = "stress test round 6";
                 }
               ];
             }).config.system.build.toplevel;
