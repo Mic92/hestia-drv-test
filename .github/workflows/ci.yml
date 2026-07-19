@@ -37,6 +37,13 @@ jobs:
       - uses: Mic92/hestia-beta@main
         with:
           wait-manifest-version: ${{ needs.eval.outputs.manifest-version }}
+      - name: Prefetch drv closure (one request)
+        run: |
+          set -euo pipefail
+          hashes=$(for installable in ${{ matrix.installables }}; do
+            basename "${installable%^*}" | cut -c1-32
+          done | paste -sd,)
+          curl -fsS "http://$HESTIA_LISTEN/closure/$hashes" | nix-store --import | wc -l
       - run: nix build -L ${{ matrix.installables }}
       - name: debug narinfo
         if: always()
